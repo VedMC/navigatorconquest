@@ -1,14 +1,19 @@
 const DB='https://navconqest-default-rtdb.europe-west1.firebasedatabase.app',PW={b:'123',r:'321',o:'1201'},INC=[1,2,3,4,5],CODES=['','48213','70365','26914','83570','15689'];
 const S=Object.assign({lang:'sr'},JSON.parse(localStorage.S||'{}')),T=(a,b)=>S.lang=='sr'?a:b,$=s=>document.querySelector(s);
-let D={},role,cur,stream,raf,prev,pulse={},on=0,sel,cod,exp,iv;
+let D={},role,cur,stream,raf,prev,pulse={},on=0,sel,cod,exp,iv,ready=0,AC,ph;
 const nm=k=>k=='b'?T('PLAVI','BLUE'):T('CRVENI','RED'),BL='#3b9cff',RD='#ff4d4d';
 const stop=()=>{clearInterval(iv);cancelAnimationFrame(raf);stream&&stream.getTracks().forEach(x=>x.stop());stream=0};
 const v=h=>{stop();$('#v').innerHTML=h};
 const btn=(f,l,c='')=>`<button class="${c}" onclick="${f}">${l}</button>`;
 const msg=(m,b='map()')=>v(`<p class="c err">${m}</p>${btn(b,T('Nazad','Back'))}`);
 const fm=ts=>new Date(ts).toLocaleTimeString('sr-Latn',{hour:'2-digit',minute:'2-digit'});
-const beep=f=>{try{const a=new AudioContext(),o=a.createOscillator();o.connect(a.destination);o.frequency.value=f;o.start();o.stop(a.currentTime+.25)}catch(e){}};
-const alarm=()=>{navigator.vibrate&&navigator.vibrate([300,100,300,100,300]);beep(330)};
+const ac=()=>{AC=AC||new(window.AudioContext||window.webkitAudioContext)();AC.state=='suspended'&&AC.resume();return AC};
+function play(seq,n=1,ty='sine',vb){try{const a=ac();let t=a.currentTime+.05;for(let r=0;r<n;r++){for(const[f,d]of seq){const o=a.createOscillator(),g=a.createGain();o.type=ty;o.frequency.value=f;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.25,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+d/1000);o.connect(g);g.connect(a.destination);o.start(t);o.stop(t+d/1000+.02);t+=d/1000+.04}t+=.4}}catch(e){}
+ navigator.vibrate&&vb&&navigator.vibrate(vb)}
+const alarm=()=>play([[330,250]],1,'sine',[300,100,300,100,300]);
+const cheer=()=>play([[523,110],[659,110],[784,110],[1047,320]],1,'triangle',[80,40,80,40,80,40,260]);
+const startSnd=()=>play([[392,160],[392,160],[523,520]],3,'square',[160,60,160,60,520,300,160,60,160,60,520,300,160,60,160,60,520]);
+const endSnd=()=>play([[523,320],[392,320],[330,320],[262,800]],3,'sawtooth',[320,60,320,60,320,60,800,300,320,60,320,60,320,60,800,300,320,60,320,60,320,60,800]);
 const gps=()=>new Promise(r=>navigator.geolocation?navigator.geolocation.getCurrentPosition(p=>r(p.coords),()=>r(null),{enableHighAccuracy:true,timeout:15000,maximumAge:3000}):r(null));
 const dist=(a,b,c,d)=>{const f=x=>x*Math.PI/180,h=Math.sin(f(c-a)/2)**2+Math.cos(f(a))*Math.cos(f(c))*Math.sin(f(d-b)/2)**2;return 12742e3*Math.asin(Math.sqrt(h))};
 async function post(ev){try{ev.t={'.sv':'timestamp'};return(await fetch(DB+'/events.json',{method:'POST',body:JSON.stringify(ev)})).ok}catch(e){return false}}
@@ -23,15 +28,16 @@ function calc(){const E=Object.values(D.events||{}).sort((a,b)=>a.t-b.t),c=D.cfg
  return{own,bal,R,cb,cr,st,en,on:st&&Date.now()>=st&&Date.now()<=en}}
 
 function conn(){if(!DB)return;const es=new EventSource(DB+'/.json');
- const ap=(p,d)=>{if(p=='/')D=d||{};else{const k=p.slice(1).split('/'),l=k.pop();let o=D;for(const x of k)o=o[x]=o[x]||{};d===null?delete o[l]:o[l]=d}chg()};
+ const ap=(p,d)=>{if(p=='/')D=d||{};else{const k=p.slice(1).split('/'),l=k.pop();let o=D;for(const x of k)o=o[x]=o[x]||{};d===null?delete o[l]:o[l]=d}const f=p=='/'&&!ready;chg();if(f)ready=1};
  es.addEventListener('put',e=>{const m=JSON.parse(e.data);ap(m.path,m.data)});
  es.addEventListener('patch',e=>{const m=JSON.parse(e.data);for(const k in m.data)ap((m.path=='/'?'':m.path)+'/'+k,m.data[k])});
  es.onopen=()=>{on=1;chg()};es.onerror=()=>{on=0;chg()}}
-function chg(){const s=calc();let lost=0;
- if(prev){for(let i=1;i<6;i++)if(prev.own[i]!=s.own[i]){pulse[i]=Date.now()+6000;setTimeout(drw,6100);if(role&&role!='o'&&prev.own[i]==role)lost=1}
-  if(role=='b'&&s.cb<prev.cb||role=='r'&&s.cr<prev.cr)lost=1;if(lost)alarm()}
+function chg(){const s=calc();let lost=0,gain=0;
+ if(prev&&ready){for(let i=1;i<6;i++)if(prev.own[i]!=s.own[i]){pulse[i]=Date.now()+6000;setTimeout(drw,6100);if(role&&role!='o'){if(prev.own[i]==role)lost=1;if(s.own[i]==role)gain=1}}
+  if(role=='b'&&s.cb<prev.cb||role=='r'&&s.cr<prev.cr)lost=1;if(lost)alarm();else if(gain)cheer()}
  prev=s;if(cur=='map')upd()}
 setInterval(()=>cur=='map'&&bars(),5000);
+setInterval(()=>{if(!ready)return;const s=calc(),n=Date.now(),p=!s.st?0:n<s.st?1:n<=s.en?2:3;if(role&&ph===1&&p===2)startSnd();if(role&&ph===2&&p===3)endSnd();ph=p},1000);
 
 function setLang(){S.lang=S.lang=='sr'?'en':'sr';localStorage.S=JSON.stringify(S);cur=='map'?map():home()}
 function home(){cur='home';role=0;v(`<div class=top><h1>NAVIGATOR CONQUEST</h1><button class=g onclick="setLang()">${S.lang.toUpperCase()}</button></div><p class=sub>${DB?'':T('Server nije podešen (DB u app.js)','Server not set (DB in app.js)')}</p>${btn("pw('b')",T('PLAVI','BLUE'),'bl')}${btn("pw('r')",T('CRVENI','RED'),'rd')}${btn("pw('o')",T('ORGANIZATOR','ORGANIZER'),'g')}`)}
