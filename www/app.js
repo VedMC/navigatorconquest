@@ -1,6 +1,6 @@
 const DB='https://navconqest-default-rtdb.europe-west1.firebasedatabase.app',PW={b:'123',r:'321',o:'1201'},CODES=['','95577','21144','37262','59115','68165','73494','57123','33574','91592','17442','93357','33489','42027','42696','27197','41732','14910','50021','90567','32505'];
 const S=Object.assign({lang:'sr'},JSON.parse(localStorage.S||'{}')),T=(a,b)=>S.lang=='sr'?a:b,$=s=>document.querySelector(s);
-let D={},role,cur,stream,raf,prev,pulse={},on=0,sel,cod,exp,iv,ready=0,AC,ph,edit=0,drag=null,dn=null,mv=0,lw=0,kc=0,rk=[],vb={x:0,y:0,w:360,h:620};
+let D={},role,cur,stream,raf,prev,pulse={},on=0,sel,cod,exp,iv,ready=0,AC,ph,edit=0,drag=null,dn=null,mv=0,lw=0,inf=0,kc=0,rk=[],vb={x:0,y:0,w:360,h:620};
 const G=new Map(),nm=k=>k=='b'?T('PLAVI','BLUE'):T('CRVENI','RED'),BL='#3b9cff',RD='#ff4d4d';
 const stop=()=>{clearInterval(iv);cancelAnimationFrame(raf);stream&&stream.getTracks().forEach(x=>x.stop());stream=0};
 const v=h=>{stop();$('#v').innerHTML=h};
@@ -19,9 +19,12 @@ const gps=()=>new Promise(r=>navigator.geolocation?navigator.geolocation.getCurr
 const dist=(a,b,c,d)=>{const f=x=>x*Math.PI/180,h=Math.sin(f(c-a)/2)**2+Math.cos(f(a))*Math.cos(f(c))*Math.sin(f(d-b)/2)**2;return 12742e3*Math.asin(Math.sqrt(h))};
 
 const setp=(p,d)=>{if(p=='/'){D=d||{};return}const k=p.slice(1).split('/'),l=k.pop();let o=D;for(const x of k)o=o[x]=o[x]||{};d===null?delete o[l]:o[l]=d};
-async function post(ev){lw=Date.now();const k=String(Date.now()).padStart(15,'0')+String(kc++%1000).padStart(3,'0')+rnd();setp(`/events/${k}`,Object.assign({},ev,{t:Date.now()}));chg();
- try{return(await fetch(`${DB}/events/${k}.json`,{method:'PUT',body:JSON.stringify(Object.assign({},ev,{t:{'.sv':'timestamp'}}))})).ok}catch(e){setp(`/events/${k}`,null);chg();return false}}
-async function put(p,d){lw=Date.now();setp(p,d);chg();try{return(await fetch(DB+p+'.json',{method:'PUT',body:JSON.stringify(d)})).ok}catch(e){return false}}
+const toast=m=>{const e=$('#ban');if(e){e.innerHTML=`<div class=ban style="background:#ff4d4d">${m}</div>`;setTimeout(()=>{const x=$('#ban');x&&(x.innerHTML='')},4000)}};
+async function post(ev){const k=String(Date.now()).padStart(15,'0')+String(kc++%1000).padStart(3,'0')+rnd(),t=Math.max(Date.now(),Object.values(D.events||{}).reduce((a,e)=>Math.max(a,+e.t||0),0)+1);
+ setp(`/events/${k}`,Object.assign({},ev,{t}));chg();inf++;
+ try{const ok=(await fetch(`${DB}/events/${k}.json`,{method:'PUT',body:JSON.stringify(Object.assign({},ev,{t:{'.sv':'timestamp'}}))})).ok;if(!ok){setp(`/events/${k}`,null);chg();toast(T('Slanje nije uspelo','Send failed'))}return ok}
+ catch(e){setp(`/events/${k}`,null);chg();toast(T('Slanje nije uspelo','Send failed'));return false}finally{inf--;lw=Date.now()}}
+async function put(p,d){setp(p,d);chg();inf++;try{const ok=(await fetch(DB+p+'.json',{method:'PUT',body:JSON.stringify(d)})).ok;if(!ok)toast(T('Slanje nije uspelo','Send failed'));return ok}catch(e){toast(T('Slanje nije uspelo','Send failed'));return false}finally{inf--;lw=Date.now()}}
 
 const DEF={1:[150,170],2:[210,310],3:[150,450]};
 const P=id=>{if(drag&&drag.t=='p'&&drag.id==id)return[drag.x,drag.y];const p=D.cfg&&D.cfg.pos&&D.cfg.pos[id];return p?[p.x,p.y]:DEF[id]||[180,310]};
@@ -41,7 +44,7 @@ function conn(){if(!DB)return;const es=new EventSource(DB+'/.json');
  es.addEventListener('put',e=>{const m=JSON.parse(e.data);ap(m.path,m.data)});
  es.addEventListener('patch',e=>{const m=JSON.parse(e.data);for(const k in m.data)ap((m.path=='/'?'':m.path)+'/'+k,m.data[k])});
  es.onopen=()=>{on=1;chg()};poll()}
-async function poll(){if(!DB||Date.now()-lw<3000)return;try{const d=await(await fetch(DB+'/.json')).json(),f=!ready;D=d||{};on=1;chg();ready=1}catch(e){on=0;chg()}}
+async function poll(){if(!DB||inf>0||Date.now()-lw<5000)return;const s0=Date.now();try{const d=await(await fetch(DB+'/.json')).json();if(inf>0||lw>s0)return;D=d||{};on=1;chg();ready=1}catch(e){on=0;chg()}}
 setInterval(poll,4000);
 function chg(){const s=calc();let lost=0,gain=0;
  if(prev&&ready){for(let i=1;i<=s.N;i++)if((prev.own[i]||0)!=(s.own[i]||0)){pulse[i]=Date.now()+6000;setTimeout(drw,6100);if(role&&role!='o'){if(prev.own[i]==role)lost=1;if(s.own[i]==role)gain=1}}
@@ -107,19 +110,19 @@ async function send(){const n=sel,s=calc(),b=`capUI(${n})`;
  put(`/codes/${n}`,rc());cod=0;pulse[n]=Date.now()+6000;map();$('#ban').innerHTML=`<div class=ban>${T('OSVOJILI STE POZICIJU','POSITION CAPTURED')}</div>`;setTimeout(()=>{const e=$('#ban');e&&(e.innerHTML='')},4000);setTimeout(drw,6100)}
 
 function pt(i){v(`<h1>${T('TAČKA ','POINT ')}${i}</h1>${btn(`so(${i},'b')`,T('Plavi drži','Blue holds'),'bl')}${btn(`so(${i},'r')`,T('Crveni drži','Red holds'),'rd')}${btn(`so(${i},0)`,T('Neutralna (reset tačke)','Neutral (reset point)'),'g')}${btn(`sl(${i})`,T('Postavi GPS lokaciju ovde','Set GPS location here'),'g')}${btn('map()',T('Nazad','Back'),'g')}`)}
-async function so(i,o){await post({k:'cap',p:i,o,by:'o'});map()}
+function so(i,o){post({k:'cap',p:i,o,by:'o'});map()}
 async function sl(i){const c=await gps();if(!c)return msg(T('GPS nije dostupan','GPS not available'));await put(`/cfg/loc/${i}`,{la:c.latitude,lo:c.longitude});msg(T('Lokacija sačuvana','Location saved'))}
 const lock=()=>calc().st?msg(T('Ne može posle podešavanja vremena igre. Prvo resetuj vreme igre.','Not allowed once the game time is set. Reset the game time first.'),'op()'):0;
-async function np(){if(lock())return;const s=calc();if(s.N>=20)return msg(T('Najviše 20 tačaka','Max 20 points'),'op()');const n=s.N+1,a=P(s.N),b=BP('r');
- await put(`/cfg/pos/${n}`,{x:Math.round((a[0]+b[0])/2+(n%2?-30:30)),y:Math.round((a[1]+b[1])/2)});await post({k:'cap',p:n,o:0,by:'o'});await post({k:'cnt',n,by:'o'});msg(`${T('Dodata tačka ','Point added ')}${n} — QR-${n}`,'op()')}
+function np(){if(lock())return;const s=calc();if(s.N>=20)return msg(T('Najviše 20 tačaka','Max 20 points'),'op()');const n=s.N+1,a=P(s.N),b=BP('r');
+ put(`/cfg/pos/${n}`,{x:Math.round((a[0]+b[0])/2+(n%2?-30:30)),y:Math.round((a[1]+b[1])/2)});post({k:'cap',p:n,o:0,by:'o'});post({k:'cnt',n,by:'o'});msg(`${T('Dodata tačka ','Point added ')}${n} — QR-${n}`,'op()')}
 function dq(){if(lock())return;const n=calc().N;if(n<=1)return msg(T('Mora ostati bar jedna tačka','At least one point must remain'),'op()');
  v(`<h1>${T('Ukloni tačku ','Remove point ')}${n}?</h1><p>${T('Uklanja se poslednja tačka (skini njen QR papir). Ostale tačke zadržavaju svoja mesta i QR kodove.','The last point is removed (take down its QR paper). The other points keep their places and QR codes.')}</p>${btn('dp()',T('Da, ukloni','Yes, remove'))}${btn('op()',T('Nazad','Back'),'g')}`)}
-async function dp(){const n=calc().N;await post({k:'cap',p:n,o:0,by:'o'});await post({k:'cnt',n:n-1,by:'o'});msg(`${T('Uklonjena tačka ','Point removed ')}${n}`,'op()')}
+function dp(){const n=calc().N;post({k:'cap',p:n,o:0,by:'o'});post({k:'cnt',n:n-1,by:'o'});msg(`${T('Uklonjena tačka ','Point removed ')}${n}`,'op()')}
 function op(){v(`<h1>${T('MENI ORGANIZATORA','ORGANIZER MENU')}</h1>${btn('np()',T('Dodaj tačku','Add point'))}${btn('dq()',T('Ukloni poslednju tačku','Remove last point'))}${btn('tf()',T('Vreme igre','Game time'))}${btn('mf()',T('Dodaj / oduzmi novac','Add / subtract money'))}${btn('hs()',T('Istorija osvajanja','Capture history'))}${btn('rs()',T('Reset','Reset'),'g')}${btn('map()',T('Nazad','Back'),'g')}`)}
 function tf(){v(`<h1>${T('Vreme igre','Game time')}</h1><small>${T('Početak','Start')}</small><input id=s type=time><small>${T('Kraj','End')}</small><input id=e type=time>${btn('tsv()',T('Sačuvaj','Save'))}${btn('op()',T('Nazad','Back'),'g')}`)}
-async function tsv(){const f=id=>{const[h,mi]=($(id).value||'').split(':');if(h==null||mi==null)return 0;const d=new Date();d.setHours(+h,+mi,0,0);return d.getTime()},a=f('#s'),b=f('#e');if(!a||!b||b<=a)return msg(T('Upiši ispravno vreme','Enter valid times'),'tf()');await put('/cfg/start',a);await put('/cfg/end',b);op()}
+function tsv(){const f=id=>{const[h,mi]=($(id).value||'').split(':');if(h==null||mi==null)return 0;const d=new Date();d.setHours(+h,+mi,0,0);return d.getTime()},a=f('#s'),b=f('#e');if(!a||!b||b<=a)return msg(T('Upiši ispravno vreme','Enter valid times'),'tf()');put('/cfg/start',a);put('/cfg/end',b);op()}
 function mf(){v(`<h1>${T('Novac','Money')}</h1><select id=tm><option value=b>${nm('b')}</option><option value=r>${nm('r')}</option></select><select id=sg><option value=1>+ ${T('Dodaj','Add')}</option><option value=-1>− ${T('Oduzmi','Subtract')}</option></select><input id=d type=number inputmode=numeric placeholder="${T('Iznos','Amount')}">${btn('msv()',T('Potvrdi','Confirm'))}${btn('op()',T('Nazad','Back'),'g')}`)}
-async function msv(){const d=+$('#d').value*+$('#sg').value;if(!d||d%1)return;await post({k:'adj',tm:$('#tm').value,d,by:'o'});op()}
+function msv(){const d=+$('#d').value*+$('#sg').value;if(!d||d%1)return;post({k:'adj',tm:$('#tm').value,d,by:'o'});op()}
 function hs(){const f=(D.cfg&&D.cfg.histFrom)||0,E=Object.values(D.events||{}).filter(e=>e.t>f).sort((a,b)=>b.t-a.t),tx=e=>e.k=='cap'?`${T('Tačka','Point')} ${e.p} → ${e.o?nm(e.o):'—'}${e.by=='o'?' (org.)':''}`:e.k=='adj'?`${nm(e.tm)} ${e.d>0?'+':''}${e.d}€`:e.k=='cnt'?`${T('Broj tačaka: ','Points: ')}${e.n}`:'Reset';
  v(`<h1>${T('Istorija osvajanja','Capture history')}</h1>`+(E.length?E.map(e=>`<div class=row2><span>${fm(e.t)}</span><span>${tx(e)}</span></div>`).join(''):`<p>—</p>`)+btn('op()',T('Nazad','Back')))}
 
@@ -127,13 +130,13 @@ const RK=[['o','Vlasništvo tačaka','Point ownership'],['m','Novac timova','Tea
 function rs(){v(`<h1>${T('Reset — izaberi šta se briše','Reset — choose what to clear')}</h1>`+RK.map(([k,a,b])=>`<label style="display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--l)"><input type=checkbox value=${k} style="width:auto;margin:0 12px 0 0">${T(a,b)}</label>`).join('')+`<p></p>`+btn('rs2()',T('Resetuj izabrano','Reset selected'))+btn('ra()',T('Resetuj sve','Reset everything'),'g')+btn('op()',T('Nazad','Back'),'g'))}
 function rs2(){rk=[...document.querySelectorAll('input[type=checkbox]:checked')].map(x=>x.value);if(!rk.length)return;
  v(`<h1>${T('Potvrdi reset','Confirm reset')}</h1><p>${RK.filter(r=>rk.includes(r[0])).map(r=>T(r[1],r[2])).join(', ')}</p>${btn('rs3()',T('Da, resetuj','Yes, reset'))}${btn('rs()',T('Nazad','Back'),'g')}`)}
-async function rs3(){const a=rk,w=(a.includes('o')?'o':'')+(a.includes('m')?'m':'');
- if(w)await post({k:'rst',w,by:'o'});
- if(a.includes('t')){await put('/cfg/start',null);await put('/cfg/end',null)}
- if(a.includes('h'))await put('/cfg/histFrom',Date.now());
- if(a.includes('g'))await put('/cfg/loc',null);
- if(a.includes('p')){await put('/cfg/pos',null);await put('/cfg/bs',null)}
- if(a.includes('n'))await post({k:'cnt',n:3,by:'o'});
+function rs3(){const a=rk,w=(a.includes('o')?'o':'')+(a.includes('m')?'m':'');
+ if(w)post({k:'rst',w,by:'o'});
+ if(a.includes('t')){put('/cfg/start',null);put('/cfg/end',null)}
+ if(a.includes('h'))put('/cfg/histFrom',Date.now());
+ if(a.includes('g'))put('/cfg/loc',null);
+ if(a.includes('p')){put('/cfg/pos',null);put('/cfg/bs',null)}
+ if(a.includes('n'))post({k:'cnt',n:3,by:'o'});
  msg(T('Reset završen','Reset done'),'op()')}
 function ra(){v(`<h1>${T('Resetuj sve?','Reset everything?')}</h1><p>${T('Briše sve: vlasništvo, novac, vreme, istoriju, GPS lokacije, raspored i broj tačaka (vraća na 3).','Clears everything: ownership, money, time, history, GPS locations, layout and number of points (back to 3).')}</p>${btn('ra2()',T('Da, resetuj sve','Yes, reset everything'))}${btn('rs()',T('Nazad','Back'),'g')}`)}
 async function ra2(){lw=Date.now();try{await fetch(DB+'/.json',{method:'DELETE'})}catch(e){return msg(T('Slanje nije uspelo','Send failed'),'op()')}D={};chg();msg(T('Sve je resetovano','Everything was reset'),'op()')}
