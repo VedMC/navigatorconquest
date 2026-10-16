@@ -1,6 +1,6 @@
 const DB='https://navconqest-default-rtdb.europe-west1.firebasedatabase.app',PW={b:'123',r:'321',o:'1201'},CODES=['','95577','21144','37262','59115','68165','73494','57123','33574','91592','17442','93357','33489','42027','42696','27197','41732','14910','50021','90567','32505'];
 const S=Object.assign({lang:'sr'},JSON.parse(localStorage.S||'{}')),T=(a,b)=>S.lang=='sr'?a:b,$=s=>document.querySelector(s);
-let D={},role,cur,stream,raf,prev,pulse={},on=0,sel,cod,exp,iv,ready=0,AC,ph,edit=0,drag=null,dn=null,mv=0,lw=0,inf=0,kc=0,rk=[],vb={x:0,y:0,w:360,h:620};
+let D={},role,cur,stream,raf,prev,pulse={},on=0,sel,cod,exp,iv,ready=0,AC,ph,edit=0,drag=null,dn=null,mv=0,lw=0,inf=0,kc=0,ek=0,rtt=0,es,lm=0,rk=[],vb={x:0,y:0,w:360,h:620};
 const G=new Map(),nm=k=>k=='b'?T('PLAVI','BLUE'):T('CRVENI','RED'),BL='#3b9cff',RD='#ff4d4d';
 const stop=()=>{clearInterval(iv);cancelAnimationFrame(raf);stream&&stream.getTracks().forEach(x=>x.stop());stream=0};
 const v=h=>{stop();$('#v').innerHTML=h};
@@ -39,13 +39,24 @@ function calc(){const E=Object.entries(D.events||{}).sort((a,b)=>a[1].t-b[1].t||
  acc(Date.now());let cb=0,cr=0;while(cb<N&&own[cb+1]=='b')cb++;while(cr<N&&own[N-cr]=='r')cr++;
  return{own,bal,R,cb,cr,N,st,en,on:st&&Date.now()>=st&&Date.now()<=en}}
 
-function conn(){if(!DB)return;const es=new EventSource(DB+'/.json');
- const ap=(p,d)=>{setp(p,d);const f=p=='/'&&!ready;chg();if(f)ready=1};
+function sse(){if(!DB)return;try{es&&es.close()}catch(e){}lm=Date.now();es=new EventSource(DB+'/.json');
+ const ap=(p,d)=>{lm=Date.now();setp(p,d);const f=p=='/'&&!ready;chg();if(f)ready=1};
  es.addEventListener('put',e=>{const m=JSON.parse(e.data);ap(m.path,m.data)});
  es.addEventListener('patch',e=>{const m=JSON.parse(e.data);for(const k in m.data)ap((m.path=='/'?'':m.path)+'/'+k,m.data[k])});
- es.onopen=()=>{on=1;chg()};poll()}
-async function poll(){if(!DB||inf>0||Date.now()-lw<5000)return;const s0=Date.now();try{const d=await(await fetch(DB+'/.json')).json();if(inf>0||lw>s0)return;D=d||{};on=1;chg();ready=1}catch(e){on=0;chg()}}
-setInterval(poll,4000);
+ es.addEventListener('keep-alive',()=>lm=Date.now());es.onopen=()=>{on=1;lm=Date.now();chg()};es.onerror=()=>{}}
+function conn(){sse();poll();setInterval(()=>{if(Date.now()-lm>45000)sse()},10000)}
+const sig=()=>{const E=Object.values(D.events||{});return JSON.stringify([D.cfg,D.codes,E.length,E.reduce((a,e)=>a+(+e.t||0),0)])};
+async function poll(){if(!DB||inf>0||Date.now()-lw<3000)return;const s0=Date.now();
+ try{const j=u=>fetch(DB+u).then(r=>r.json()),q=ek?`?orderBy=%22$key%22&startAt=%22${String(Math.max(0,ek-18e4)).padStart(15,'0')}%22`:'';
+  const[c,cd,ev]=await Promise.all([j('/cfg.json'),j('/codes.json'),j('/events.json'+q)]);rtt=Date.now()-s0;
+  if(inf>0||lw>s0)return;
+  const b=sig(),full=!ready||((D.cfg&&D.cfg.epoch)!==(c&&c.epoch));
+  if(full){const d=await j('/.json');if(inf>0||lw>s0)return;D=d||{}}
+  else{D.cfg=c||{};D.codes=cd||{};D.events=D.events||{};Object.assign(D.events,ev||{})}
+  for(const k in D.events)if(/^\d{15}/.test(k))ek=Math.max(ek,Math.min(+k.slice(0,15),Date.now()));
+  on=1;const first=!ready;ready=1;if(first||sig()!==b)chg()}
+ catch(e){on=0;chg()}}
+setInterval(poll,2000);
 function chg(){const s=calc();let lost=0,gain=0;
  if(prev&&ready){for(let i=1;i<=s.N;i++)if((prev.own[i]||0)!=(s.own[i]||0)){pulse[i]=Date.now()+6000;setTimeout(drw,6100);if(role&&role!='o'){if(prev.own[i]==role)lost=1;if(s.own[i]==role)gain=1}}
   if(role=='b'&&s.cb<prev.cb||role=='r'&&s.cr<prev.cr)lost=1;if(lost)alarm();else if(gain)cheer()}
@@ -62,7 +73,7 @@ function map(){cur='map';v(`<div class=top><h1 class="${role=='b'?'bl':role=='r'
 const zr=()=>{vb={x:0,y:0,w:360,h:620};drw()},te=()=>{edit=!edit;map()},upd=()=>{bars();drw()};
 function bars(){const s=calc(),el=$('#st');if(!el)return;
  const g=!DB?T('Server nije podešen','No server'):!on?T('Nema veze…','Offline…'):!s.st?T('Vreme igre nije podešeno','Game time not set'):Date.now()<s.st?T('Počinje u ','Starts at ')+fm(s.st):s.on?T('Kraj igre: ','Game ends: ')+fm(s.en):T('IGRA ZAVRŠENA — ','GAME OVER — ')+(s.bal.b==s.bal.r?T('nerešeno','draw'):(s.bal.b>s.bal.r?nm('b'):nm('r'))+T(' pobeđuje',' wins'));
- el.innerHTML=`<div class=stat><span class=bl>${nm('b')} ${Math.floor(s.bal.b)}€ <small>+${s.R.b}€/60s</small></span><span class=rd>${nm('r')} ${Math.floor(s.bal.r)}€ <small>+${s.R.r}€/60s</small></span></div><p class=sub>${g}</p>${edit?`<p class=sub>${T('REŽIM UREĐIVANJA: prevlači tačke i baze','EDIT MODE: drag points and bases')}</p>`:''}`}
+ el.innerHTML=`<div class=stat><span class=bl>${nm('b')} ${Math.floor(s.bal.b)}€ <small>+${s.R.b}€/60s</small></span><span class=rd>${nm('r')} ${Math.floor(s.bal.r)}€ <small>+${s.R.r}€/60s</small></span></div><p class=sub>${g}${DB?` · ⏱ ${rtt?(rtt/1000).toFixed(1)+' s':'—'}`:''}</p>${edit?`<p class=sub>${T('REŽIM UREĐIVANJA: prevlači tačke i baze','EDIT MODE: drag points and bases')}</p>`:''}`}
 function drw(){const el=$('#mp');if(!el)return;const s=calc(),n=s.N,C=o=>o=='b'?BL:o=='r'?RD:'#2f7a4f',N=[BP('b')];for(let i=1;i<=n;i++)N.push(P(i));N.push(BP('r'));
  let h=`<svg id=svg viewBox="${vb.x} ${vb.y} ${vb.w} ${vb.h}"><g stroke="#15402a" fill="none"><circle cx=180 cy=310 r=90 /><circle cx=180 cy=310 r=170 /><circle cx=180 cy=310 r=260 /><line x1=180 y1=10 x2=180 y2=610 /><line x1=0 y1=310 x2=360 y2=310 /></g><g class=sw><line x1=180 y1=310 x2=180 y2=45 stroke="#35ff8a" opacity=.45 /></g>`;
  const sg=(a,b,c)=>h+=`<line class=fl x1="${N[a][0]}" y1="${N[a][1]}" x2="${N[b][0]}" y2="${N[b][1]}" stroke="${c}"/>`;
@@ -139,5 +150,5 @@ function rs3(){const a=rk,w=(a.includes('o')?'o':'')+(a.includes('m')?'m':'');
  if(a.includes('n'))post({k:'cnt',n:3,by:'o'});
  msg(T('Reset završen','Reset done'),'op()')}
 function ra(){v(`<h1>${T('Resetuj sve?','Reset everything?')}</h1><p>${T('Briše sve: vlasništvo, novac, vreme, istoriju, GPS lokacije, raspored i broj tačaka (vraća na 3).','Clears everything: ownership, money, time, history, GPS locations, layout and number of points (back to 3).')}</p>${btn('ra2()',T('Da, resetuj sve','Yes, reset everything'))}${btn('rs()',T('Nazad','Back'),'g')}`)}
-async function ra2(){lw=Date.now();try{await fetch(DB+'/.json',{method:'DELETE'})}catch(e){return msg(T('Slanje nije uspelo','Send failed'),'op()')}D={};chg();msg(T('Sve je resetovano','Everything was reset'),'op()')}
+async function ra2(){const ep=Date.now();lw=ep;inf++;try{await fetch(DB+'/.json',{method:'PUT',body:JSON.stringify({cfg:{epoch:ep}})})}catch(e){inf--;return msg(T('Slanje nije uspelo','Send failed'),'op()')}inf--;lw=Date.now();D={cfg:{epoch:ep}};ek=0;chg();msg(T('Sve je resetovano','Everything was reset'),'op()')}
 conn();home();
