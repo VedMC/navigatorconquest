@@ -1,6 +1,6 @@
 const DB='https://navconqest-default-rtdb.europe-west1.firebasedatabase.app',PW={b:'123',r:'321',o:'1201'},CODES=['','95577','21144','37262','59115','68165','73494','57123','33574','91592','17442','93357','33489','42027','42696','27197','41732','14910','50021','90567','32505'];
 const S=Object.assign({lang:'sr'},JSON.parse(localStorage.S||'{}')),T=(a,b)=>S.lang=='sr'?a:b,$=s=>document.querySelector(s);
-let D={},role,cur,stream,raf,prev,pulse={},on=0,sel,cod,exp,iv,ready=0,AC,ph,edit=0,drag=null,dn=null,mv=0,lw=0,inf=0,kc=0,ek=0,rtt=0,es,lm=0,rk=[],vb={x:0,y:0,w:360,h:620};
+let D={},role,cur,stream,raf,prev,pulse={},on=0,sel,cod,exp,iv,ready=0,AC,ph,edit=0,drag=null,dn=null,mv=0,lw=0,inf=0,kc=0,ek=0,rtt=0,lu=0,es,lm=0,rk=[],vb={x:0,y:0,w:360,h:620};
 const G=new Map(),nm=k=>k=='b'?T('PLAVI','BLUE'):T('CRVENI','RED'),BL='#3b9cff',RD='#ff4d4d';
 const stop=()=>{clearInterval(iv);cancelAnimationFrame(raf);stream&&stream.getTracks().forEach(x=>x.stop());stream=0};
 const v=h=>{stop();$('#v').innerHTML=h};
@@ -19,7 +19,7 @@ const gps=()=>new Promise(r=>navigator.geolocation?navigator.geolocation.getCurr
 const dist=(a,b,c,d)=>{const f=x=>x*Math.PI/180,h=Math.sin(f(c-a)/2)**2+Math.cos(f(a))*Math.cos(f(c))*Math.sin(f(d-b)/2)**2;return 12742e3*Math.asin(Math.sqrt(h))};
 
 const setp=(p,d)=>{if(p=='/'){D=d||{};return}const k=p.slice(1).split('/'),l=k.pop();let o=D;for(const x of k)o=o[x]=o[x]||{};d===null?delete o[l]:o[l]=d};
-const toast=m=>{const e=$('#ban');if(e){e.innerHTML=`<div class=ban style="background:#ff4d4d">${m}</div>`;setTimeout(()=>{const x=$('#ban');x&&(x.innerHTML='')},4000)}};
+const toast=(m,c='#ff4d4d')=>{const e=$('#ban');if(e){e.innerHTML=`<div class=ban style="background:${c}">${m}</div>`;setTimeout(()=>{const x=$('#ban');x&&(x.innerHTML='')},4000)}};
 async function post(ev){const k=String(Date.now()).padStart(15,'0')+String(kc++%1000).padStart(3,'0')+rnd(),t=Math.max(Date.now(),Object.values(D.events||{}).reduce((a,e)=>Math.max(a,+e.t||0),0)+1);
  setp(`/events/${k}`,Object.assign({},ev,{t}));chg();inf++;
  try{const ok=(await fetch(`${DB}/events/${k}.json`,{method:'PUT',body:JSON.stringify(Object.assign({},ev,{t:{'.sv':'timestamp'}}))})).ok;if(!ok){setp(`/events/${k}`,null);chg();toast(T('Slanje nije uspelo','Send failed'))}return ok}
@@ -46,7 +46,7 @@ function sse(){if(!DB)return;try{es&&es.close()}catch(e){}lm=Date.now();es=new E
  es.addEventListener('keep-alive',()=>lm=Date.now());es.onopen=()=>{on=1;lm=Date.now();chg()};es.onerror=()=>{}}
 function conn(){sse();poll();setInterval(()=>{if(Date.now()-lm>45000)sse()},10000)}
 const sig=()=>{const E=Object.values(D.events||{});return JSON.stringify([D.cfg,D.codes,E.length,E.reduce((a,e)=>a+(+e.t||0),0)])};
-async function poll(){if(!DB||inf>0||Date.now()-lw<3000)return;const s0=Date.now();
+async function poll(f){if(!DB||(!f&&(inf>0||Date.now()-lw<3000)))return;const s0=Date.now();
  try{const j=u=>fetch(DB+u).then(r=>r.json()),q=ek?`?orderBy=%22$key%22&startAt=%22${String(Math.max(0,ek-18e4)).padStart(15,'0')}%22`:'';
   const[c,cd,ev]=await Promise.all([j('/cfg.json'),j('/codes.json'),j('/events.json'+q)]);rtt=Date.now()-s0;
   if(inf>0||lw>s0)return;
@@ -54,9 +54,10 @@ async function poll(){if(!DB||inf>0||Date.now()-lw<3000)return;const s0=Date.now
   if(full){const d=await j('/.json');if(inf>0||lw>s0)return;D=d||{}}
   else{D.cfg=c||{};D.codes=cd||{};D.events=D.events||{};Object.assign(D.events,ev||{})}
   for(const k in D.events)if(/^\d{15}/.test(k))ek=Math.max(ek,Math.min(+k.slice(0,15),Date.now()));
-  on=1;const first=!ready;ready=1;if(first||sig()!==b)chg()}
+  on=1;lu=Date.now();const first=!ready;ready=1;if(first||sig()!==b)chg()}
  catch(e){on=0;chg()}}
-setInterval(poll,2000);
+const pms=()=>1000*(role=='o'?(S.ro||5):((D.cfg&&D.cfg.pr)||5));
+(function pl(){poll();setTimeout(pl,pms())})();
 function chg(){const s=calc();let lost=0,gain=0;
  if(prev&&ready){for(let i=1;i<=s.N;i++)if((prev.own[i]||0)!=(s.own[i]||0)){pulse[i]=Date.now()+6000;setTimeout(drw,6100);if(role&&role!='o'){if(prev.own[i]==role)lost=1;if(s.own[i]==role)gain=1}}
   if(role=='b'&&s.cb<prev.cb||role=='r'&&s.cr<prev.cr)lost=1;if(lost)alarm();else if(gain)cheer()}
@@ -69,11 +70,12 @@ function home(){cur='home';role=0;edit=0;v(`<div class=top><h1>NAVIGATOR CONQUES
 function pw(r){cur='pw';v(`<h1>${r=='o'?T('ORGANIZATOR','ORGANIZER'):nm(r)}</h1><input id=p type=password inputmode=numeric placeholder="${T('Šifra','Password')}">${btn(`ck('${r}')`,'OK')}${btn('home()',T('Nazad','Back'),'g')}`)}
 function ck(r){if($('#p').value==PW[r]){role=r;map()}else msg(T('Pogrešna šifra','Wrong password'),'home()')}
 
-function map(){cur='map';v(`<div class=top><h1 class="${role=='b'?'bl':role=='r'?'rd':''}">${role=='o'?T('ORGANIZATOR','ORGANIZER'):nm(role)}</h1><div class=row><button class=g onclick="zr()">⟲</button><button class=g onclick="setLang()">${S.lang.toUpperCase()}</button><button class=g onclick="home()">✕</button></div></div><div id=st></div><div id=ban></div><div id=mp></div>${btn('scn()',T('Skeniraj QR','Scan QR'))}${role=='o'?btn('te()',edit?T('Završi uređivanje mape','Finish map editing'):T('Uredi mapu','Edit map'),'g')+btn('op()',T('Meni organizatora','Organizer menu'),'g'):''}`);gin();upd()}
+function map(){cur='map';v(`<div class=top><h1 class="${role=='b'?'bl':role=='r'?'rd':''}">${role=='o'?T('ORGANIZATOR','ORGANIZER'):nm(role)}</h1><div class=row><button class=g onclick="rf()">↻</button><button class=g onclick="zr()">⟲</button><button class=g onclick="setLang()">${S.lang.toUpperCase()}</button><button class=g onclick="home()">✕</button></div></div><div id=st></div><div id=ban></div><div id=mp></div>${btn('scn()',T('Skeniraj QR','Scan QR'))}${role=='o'?btn('te()',edit?T('Završi uređivanje mape','Finish map editing'):T('Uredi mapu','Edit map'),'g')+btn('op()',T('Meni organizatora','Organizer menu'),'g'):''}`);gin();upd()}
+async function rf(){await poll(1);toast(T('Osveženo','Updated'),'#35ff8a')}
 const zr=()=>{vb={x:0,y:0,w:360,h:620};drw()},te=()=>{edit=!edit;map()},upd=()=>{bars();drw()};
 function bars(){const s=calc(),el=$('#st');if(!el)return;
  const g=!DB?T('Server nije podešen','No server'):!on?T('Nema veze…','Offline…'):!s.st?T('Vreme igre nije podešeno','Game time not set'):Date.now()<s.st?T('Počinje u ','Starts at ')+fm(s.st):s.on?T('Kraj igre: ','Game ends: ')+fm(s.en):T('IGRA ZAVRŠENA — ','GAME OVER — ')+(s.bal.b==s.bal.r?T('nerešeno','draw'):(s.bal.b>s.bal.r?nm('b'):nm('r'))+T(' pobeđuje',' wins'));
- el.innerHTML=`<div class=stat><span class=bl>${nm('b')} ${Math.floor(s.bal.b)}€ <small>+${s.R.b}€/60s</small></span><span class=rd>${nm('r')} ${Math.floor(s.bal.r)}€ <small>+${s.R.r}€/60s</small></span></div><p class=sub>${g}${DB?` · ⏱ ${rtt?(rtt/1000).toFixed(1)+' s':'—'}`:''}</p>${edit?`<p class=sub>${T('REŽIM UREĐIVANJA: prevlači tačke i baze','EDIT MODE: drag points and bases')}</p>`:''}`}
+ el.innerHTML=`<div class=stat><span class=bl>${nm('b')} ${Math.floor(s.bal.b)}€ <small>+${s.R.b}€/60s</small></span><span class=rd>${nm('r')} ${Math.floor(s.bal.r)}€ <small>+${s.R.r}€/60s</small></span></div><p class=sub>${g}${DB?` · ⏱ ${rtt?(rtt/1000).toFixed(1)+' s':'—'}${lu?' · '+new Date(lu).toLocaleTimeString('sr-Latn',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):''}`:''}</p>${edit?`<p class=sub>${T('REŽIM UREĐIVANJA: prevlači tačke i baze','EDIT MODE: drag points and bases')}</p>`:''}`}
 function drw(){const el=$('#mp');if(!el)return;const s=calc(),n=s.N,C=o=>o=='b'?BL:o=='r'?RD:'#2f7a4f',N=[BP('b')];for(let i=1;i<=n;i++)N.push(P(i));N.push(BP('r'));
  let h=`<svg id=svg viewBox="${vb.x} ${vb.y} ${vb.w} ${vb.h}"><g stroke="#15402a" fill="none"><circle cx=180 cy=310 r=90 /><circle cx=180 cy=310 r=170 /><circle cx=180 cy=310 r=260 /><line x1=180 y1=10 x2=180 y2=610 /><line x1=0 y1=310 x2=360 y2=310 /></g><g class=sw><line x1=180 y1=310 x2=180 y2=45 stroke="#35ff8a" opacity=.45 /></g>`;
  const sg=(a,b,c)=>h+=`<line class=fl x1="${N[a][0]}" y1="${N[a][1]}" x2="${N[b][0]}" y2="${N[b][1]}" stroke="${c}"/>`;
@@ -103,6 +105,7 @@ function scn(){v(`<h1>${T('Skeniraj QR','Scan QR')}</h1><video id=vd playsinline
    if(q&&CODES[id]&&CODES[id]==q[2]){stop();if(id>calc().N)return msg(T('Ova tačka nije u igri','This point is not in play'));return role=='o'?msg(`${T('TAČKA ','POINT ')}${id} — ${(D.codes&&D.codes[id])||'—'}`):cap(id)}}raf=requestAnimationFrame(tick)};tick()}).catch(()=>msg(T('Kamera nije dostupna','Camera not available')))}
 const rc=()=>String(Math.floor(1e4+Math.random()*9e4)),valid=n=>Date.now()<=exp&&D.codes&&D.codes[n]===cod;
 async function cap(n){if(!DB||!on)return msg(T('Nema veze sa serverom','No connection'));
+ await poll(1);if(n>calc().N)return msg(T('Ova tačka nije u igri','This point is not in play'));
  const c=rc();if(!await put(`/codes/${n}`,c))return msg(T('Slanje nije uspelo','Send failed'));
  sel=n;cod=c;exp=Date.now()+6e4;capUI(n)}
 function capUI(n){if(!valid(n))return msg(T('Šifra više ne važi. Skeniraj ponovo.','Code no longer valid. Scan again.'));
@@ -110,6 +113,7 @@ function capUI(n){if(!valid(n))return msg(T('Šifra više ne važi. Skeniraj pon
  const tk=()=>{const r=Math.ceil((exp-Date.now())/1000);if(r<=0)return msg(T('Šifra je istekla. Skeniraj ponovo.','Code expired. Scan again.'));const e=$('#tm');if(e)e.textContent=r+' s'};tk();iv=setInterval(tk,1000)}
 async function send(){const n=sel,s=calc(),b=`capUI(${n})`;
  if($('#cd').value!=cod)return msg(T('Pogrešna šifra','Wrong code'),b);
+ await poll(1);
  if(!valid(n))return msg(T('Šifra više ne važi. Skeniraj ponovo.','Code no longer valid. Scan again.'));
  if(!DB||!on)return msg(T('Nema veze sa serverom','No connection'),b);
  if(n>s.N)return msg(T('Ova tačka nije u igri','This point is not in play'));
@@ -129,7 +133,11 @@ function np(){if(lock())return;const s=calc();if(s.N>=20)return msg(T('Najviše 
 function dq(){if(lock())return;const n=calc().N;if(n<=1)return msg(T('Mora ostati bar jedna tačka','At least one point must remain'),'op()');
  v(`<h1>${T('Ukloni tačku ','Remove point ')}${n}?</h1><p>${T('Uklanja se poslednja tačka (skini njen QR papir). Ostale tačke zadržavaju svoja mesta i QR kodove.','The last point is removed (take down its QR paper). The other points keep their places and QR codes.')}</p>${btn('dp()',T('Da, ukloni','Yes, remove'))}${btn('op()',T('Nazad','Back'),'g')}`)}
 function dp(){const n=calc().N;post({k:'cap',p:n,o:0,by:'o'});post({k:'cnt',n:n-1,by:'o'});msg(`${T('Uklonjena tačka ','Point removed ')}${n}`,'op()')}
-function op(){v(`<h1>${T('MENI ORGANIZATORA','ORGANIZER MENU')}</h1>${btn('np()',T('Dodaj tačku','Add point'))}${btn('dq()',T('Ukloni poslednju tačku','Remove last point'))}${btn('tf()',T('Vreme igre','Game time'))}${btn('mf()',T('Dodaj / oduzmi novac','Add / subtract money'))}${btn('hs()',T('Istorija osvajanja','Capture history'))}${btn('rs()',T('Reset','Reset'),'g')}${btn('map()',T('Nazad','Back'),'g')}`)}
+function op(){v(`<h1>${T('MENI ORGANIZATORA','ORGANIZER MENU')}</h1>${btn('np()',T('Dodaj tačku','Add point'))}${btn('dq()',T('Ukloni poslednju tačku','Remove last point'))}${btn('tf()',T('Vreme igre','Game time'))}${btn('ri()',T('Osvežavanje','Refresh rate'))}${btn('mf()',T('Dodaj / oduzmi novac','Add / subtract money'))}${btn('hs()',T('Istorija osvajanja','Capture history'))}${btn('rs()',T('Reset','Reset'),'g')}${btn('map()',T('Nazad','Back'),'g')}`)}
+function ri(){const o=S.ro||5,p=(D.cfg&&D.cfg.pr)||5,row=(c,f)=>`<div class=row>${[3,5,10,30].map(n=>`<button class="${n==c?'':'g'}" onclick="${f}(${n})">${n} s</button>`).join('')}</div>`;
+ v(`<h1>${T('Osvežavanje','Refresh rate')}</h1><small>${T('Za organizatora (ovaj telefon)','For organizer (this phone)')}</small>${row(o,'setRo')}<small>${T('Za igrače (svi telefoni)','For players (all phones)')}</small>${row(p,'setRp')}${btn('op()',T('Nazad','Back'),'g')}`)}
+function setRo(n){S.ro=n;localStorage.S=JSON.stringify(S);ri()}
+function setRp(n){put('/cfg/pr',n);ri()}
 function tf(){v(`<h1>${T('Vreme igre','Game time')}</h1><small>${T('Početak','Start')}</small><input id=s type=time><small>${T('Kraj','End')}</small><input id=e type=time>${btn('tsv()',T('Sačuvaj','Save'))}${btn('op()',T('Nazad','Back'),'g')}`)}
 function tsv(){const f=id=>{const[h,mi]=($(id).value||'').split(':');if(h==null||mi==null)return 0;const d=new Date();d.setHours(+h,+mi,0,0);return d.getTime()},a=f('#s'),b=f('#e');if(!a||!b||b<=a)return msg(T('Upiši ispravno vreme','Enter valid times'),'tf()');put('/cfg/start',a);put('/cfg/end',b);op()}
 function mf(){v(`<h1>${T('Novac','Money')}</h1><select id=tm><option value=b>${nm('b')}</option><option value=r>${nm('r')}</option></select><select id=sg><option value=1>+ ${T('Dodaj','Add')}</option><option value=-1>− ${T('Oduzmi','Subtract')}</option></select><input id=d type=number inputmode=numeric placeholder="${T('Iznos','Amount')}">${btn('msv()',T('Potvrdi','Confirm'))}${btn('op()',T('Nazad','Back'),'g')}`)}
